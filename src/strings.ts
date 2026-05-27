@@ -34,6 +34,18 @@ export type AppStrings = {
   noLifeDates: string;
   unknownError: string;
   fallbackPersonName: (id: number) => string;
+  errorFirstNameOrLastNameRequired: string;
+  errorBirthDateAfterDeathDate: string;
+  errorInvalidPersonId: string;
+  errorPersonNotFound: string;
+  errorParentChildInvalidIds: string;
+  errorSamePersonRelationship: string;
+  errorRelationshipCreatesCycle: string;
+  errorRelationshipExists: string;
+  errorParentOrChildNotFound: string;
+  errorInvalidRelationshipId: string;
+  errorRelationshipNotFound: string;
+  errorInternalServer: string;
 };
 
 export const defaultLanguage: Language = 'en';
@@ -73,6 +85,18 @@ export const strings: Record<Language, AppStrings> = {
     noLifeDates: 'No life dates',
     unknownError: 'Unknown error.',
     fallbackPersonName: (id: number) => `Person ${id}`,
+    errorFirstNameOrLastNameRequired: 'First name or last name is required.',
+    errorBirthDateAfterDeathDate: 'Birth date must be before or equal to death date.',
+    errorInvalidPersonId: 'Invalid person ID.',
+    errorPersonNotFound: 'Person not found.',
+    errorParentChildInvalidIds: 'Parent and child must be valid IDs.',
+    errorSamePersonRelationship: 'Parent and child must not be the same person.',
+    errorRelationshipCreatesCycle: 'Cannot create relationship: it would introduce a cycle.',
+    errorRelationshipExists: 'This parent-child relationship already exists.',
+    errorParentOrChildNotFound: 'Parent or child was not found.',
+    errorInvalidRelationshipId: 'Invalid relationship ID.',
+    errorRelationshipNotFound: 'Relationship not found.',
+    errorInternalServer: 'Internal server error.',
   },
   de: {
     appTitle: 'Stammbaum',
@@ -108,6 +132,18 @@ export const strings: Record<Language, AppStrings> = {
     noLifeDates: 'Keine Lebensdaten',
     unknownError: 'Unbekannter Fehler.',
     fallbackPersonName: (id: number) => `Person ${id}`,
+    errorFirstNameOrLastNameRequired: 'Vorname oder Nachname muss gesetzt sein.',
+    errorBirthDateAfterDeathDate: 'Geburtsdatum muss vor oder am Sterbedatum liegen.',
+    errorInvalidPersonId: 'Ungueltige Personen-ID.',
+    errorPersonNotFound: 'Person nicht gefunden.',
+    errorParentChildInvalidIds: 'Elternteil und Kind muessen gueltige IDs sein.',
+    errorSamePersonRelationship: 'Elternteil und Kind duerfen nicht identisch sein.',
+    errorRelationshipCreatesCycle: 'Beziehung kann nicht angelegt werden, weil sie einen Kreis erzeugen wuerde.',
+    errorRelationshipExists: 'Diese Eltern-Kind-Beziehung existiert bereits.',
+    errorParentOrChildNotFound: 'Elternteil oder Kind wurde nicht gefunden.',
+    errorInvalidRelationshipId: 'Ungueltige Beziehungs-ID.',
+    errorRelationshipNotFound: 'Beziehung nicht gefunden.',
+    errorInternalServer: 'Interner Serverfehler.',
   },
 };
 

@@ -15,6 +15,10 @@ type RelationshipPayload = {
   child_id?: unknown;
 };
 
+type ChildIdRow = {
+  child_id: number;
+};
+
 export function createApp(db: Database.Database = openDatabase()) {
   const app = express();
   app.use(express.json());
@@ -35,6 +39,11 @@ export function createApp(db: Database.Database = openDatabase()) {
       return;
     }
 
+    if (hasInvalidLifeDates(payload)) {
+      res.status(400).json({ error: 'Birth date must be before or equal to death date.' });
+      return;
+    }
+
     const result = db
       .prepare(
         `INSERT INTO persons (first_name, last_name, birth_date, death_date, notes)
@@ -47,8 +56,8 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.patch('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
       res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
@@ -62,6 +71,11 @@ export function createApp(db: Database.Database = openDatabase()) {
     const payload = normalizePerson({ ...existing, ...req.body });
     if (!payload) {
       res.status(400).json({ error: 'First name or last name is required.' });
+      return;
+    }
+
+    if (hasInvalidLifeDates(payload)) {
+      res.status(400).json({ error: 'Birth date must be before or equal to death date.' });
       return;
     }
 
@@ -80,8 +94,8 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.delete('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
       res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
@@ -112,6 +126,11 @@ export function createApp(db: Database.Database = openDatabase()) {
       return;
     }
 
+    if (hasRelationshipPath(db, payload.child_id, payload.parent_id)) {
+      res.status(400).json({ error: 'Cannot create relationship: it would introduce a cycle.' });
+      return;
+    }
+
     try {
       const result = db
         .prepare('INSERT INTO relationships (parent_id, child_id, type) VALUES (?, ?, ?)')
@@ -135,8 +154,8 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.delete('/api/relationships/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
       res.status(400).json({ error: 'Invalid relationship ID.' });
       return;
     }
@@ -176,10 +195,10 @@ function normalizePerson(payload: PersonPayload) {
 }
 
 function normalizeRelationship(payload: RelationshipPayload) {
-  const parent_id = Number(payload.parent_id);
-  const child_id = Number(payload.child_id);
+  const parent_id = asPositiveInteger(payload.parent_id);
+  const child_id = asPositiveInteger(payload.child_id);
 
-  if (!Number.isInteger(parent_id) || !Number.isInteger(child_id)) {
+  if (!parent_id || !child_id) {
     return null;
   }
 
@@ -193,6 +212,42 @@ function asText(value: unknown) {
 function asOptionalText(value: unknown) {
   const text = asText(value);
   return text.length > 0 ? text : null;
+}
+
+function asPositiveInteger(value: unknown) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function hasInvalidLifeDates(person: { birth_date: string | null; death_date: string | null }) {
+  return Boolean(person.birth_date && person.death_date && person.birth_date > person.death_date);
+}
+
+function hasRelationshipPath(db: Database.Database, startId: number, targetId: number) {
+  const queuedIds = [startId];
+  const visitedIds = new Set<number>();
+  const selectChildren = db.prepare('SELECT child_id FROM relationships WHERE parent_id = ?');
+
+  for (let index = 0; index < queuedIds.length; index += 1) {
+    const currentId = queuedIds[index];
+    if (currentId === targetId) {
+      return true;
+    }
+
+    if (visitedIds.has(currentId)) {
+      continue;
+    }
+
+    visitedIds.add(currentId);
+    const children = selectChildren.all(currentId) as ChildIdRow[];
+    for (const child of children) {
+      if (!visitedIds.has(child.child_id)) {
+        queuedIds.push(child.child_id);
+      }
+    }
+  }
+
+  return false;
 }
 
 function getPerson(db: Database.Database, id: number) {

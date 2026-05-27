@@ -38,6 +38,24 @@ const emptyPersonForm: PersonFormState = {
 
 const languageStorageKey = 'flintrGenealogy.language';
 const languageOptions: Language[] = ['en', 'de'];
+type AppStringKey = {
+  [Key in keyof AppStrings]: AppStrings[Key] extends string ? Key : never;
+}[keyof AppStrings];
+
+const backendErrorKeys: Record<string, AppStringKey> = {
+  'First name or last name is required.': 'errorFirstNameOrLastNameRequired',
+  'Birth date must be before or equal to death date.': 'errorBirthDateAfterDeathDate',
+  'Invalid person ID.': 'errorInvalidPersonId',
+  'Person not found.': 'errorPersonNotFound',
+  'Parent and child must be valid IDs.': 'errorParentChildInvalidIds',
+  'Parent and child must not be the same person.': 'errorSamePersonRelationship',
+  'Cannot create relationship: it would introduce a cycle.': 'errorRelationshipCreatesCycle',
+  'This parent-child relationship already exists.': 'errorRelationshipExists',
+  'Parent or child was not found.': 'errorParentOrChildNotFound',
+  'Invalid relationship ID.': 'errorInvalidRelationshipId',
+  'Relationship not found.': 'errorRelationshipNotFound',
+  'Internal server error.': 'errorInternalServer',
+};
 
 export default function App() {
   const [language, setLanguage] = useState<Language>(() => {
@@ -53,6 +71,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const appStrings = strings[language];
+  const personsById = useMemo(() => new Map(persons.map((person) => [person.id, person])), [persons]);
 
   async function loadData() {
     setIsLoading(true);
@@ -82,7 +101,7 @@ export default function App() {
     window.localStorage.setItem(languageStorageKey, language);
   }, [appStrings.appTitle, language]);
 
-  const selectedPerson = editingPersonId ? persons.find((person) => person.id === editingPersonId) : null;
+  const selectedPerson = editingPersonId ? personsById.get(editingPersonId) : null;
   const treeRoots = useMemo(() => getTreeRoots(persons, relationships), [persons, relationships]);
   const childrenByParent = useMemo(() => groupChildrenByParent(relationships), [relationships]);
 
@@ -287,8 +306,8 @@ export default function App() {
               relationships.map((relationship) => (
                 <div className="relationship-row" key={relationship.id}>
                   <span>
-                    {formatPersonById(persons, relationship.parent_id, appStrings)} {'->'}{' '}
-                    {formatPersonById(persons, relationship.child_id, appStrings)}
+                    {formatPersonById(personsById, relationship.parent_id, appStrings)} {'->'}{' '}
+                    {formatPersonById(personsById, relationship.child_id, appStrings)}
                   </span>
                   <button type="button" className="link-button" onClick={() => void deleteRelationship(relationship.id)}>
                     {appStrings.delete}
@@ -337,7 +356,7 @@ export default function App() {
                 <TreeNode
                   key={person.id}
                   person={person}
-                  persons={persons}
+                  personsById={personsById}
                   childrenByParent={childrenByParent}
                   appStrings={appStrings}
                   visited={new Set()}
@@ -353,13 +372,13 @@ export default function App() {
 
 function TreeNode({
   person,
-  persons,
+  personsById,
   childrenByParent,
   appStrings,
   visited,
 }: {
   person: Person;
-  persons: Person[];
+  personsById: Map<number, Person>;
   childrenByParent: Map<number, number[]>;
   appStrings: AppStrings;
   visited: Set<number>;
@@ -368,7 +387,7 @@ function TreeNode({
   nextVisited.add(person.id);
   const childIds = childrenByParent.get(person.id) ?? [];
   const children = childIds
-    .map((id) => persons.find((candidate) => candidate.id === id))
+    .map((id) => personsById.get(id))
     .filter((candidate): candidate is Person => Boolean(candidate));
 
   return (
@@ -387,7 +406,7 @@ function TreeNode({
               <TreeNode
                 key={child.id}
                 person={child}
-                persons={persons}
+                personsById={personsById}
                 childrenByParent={childrenByParent}
                 appStrings={appStrings}
                 visited={nextVisited}
@@ -440,8 +459,8 @@ function formatPerson(person: Person) {
   return [person.first_name, person.last_name].filter(Boolean).join(' ');
 }
 
-function formatPersonById(persons: Person[], id: number, appStrings: AppStrings) {
-  return formatPerson(persons.find((person) => person.id === id) ?? fallbackPerson(id, appStrings));
+function formatPersonById(personsById: Map<number, Person>, id: number, appStrings: AppStrings) {
+  return formatPerson(personsById.get(id) ?? fallbackPerson(id, appStrings));
 }
 
 function fallbackPerson(id: number, appStrings: AppStrings): Person {
@@ -466,5 +485,10 @@ function formatLifeDates(person: Person, appStrings: AppStrings) {
 }
 
 function getErrorMessage(error: unknown, appStrings: AppStrings) {
-  return error instanceof Error ? error.message : appStrings.unknownError;
+  if (!(error instanceof Error)) {
+    return appStrings.unknownError;
+  }
+
+  const errorKey = backendErrorKeys[error.message];
+  return errorKey ? appStrings[errorKey] : error.message;
 }

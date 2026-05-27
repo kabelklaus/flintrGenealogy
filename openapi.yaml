@@ -50,7 +50,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Person'
         '400':
-          $ref: '#/components/responses/InvalidPerson'
+          description: Invalid person payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingName:
+                  value:
+                    error: First name or last name is required.
+                invalidLifeDates:
+                  value:
+                    error: Birth date must be before or equal to death date.
   /api/persons/{id}:
     patch:
       summary: Update a person
@@ -75,6 +86,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                invalidId:
+                  value:
+                    error: Invalid person ID.
+                missingName:
+                  value:
+                    error: First name or last name is required.
+                invalidLifeDates:
+                  value:
+                    error: Birth date must be before or equal to death date.
         '404':
           description: Person not found.
           content:
@@ -128,11 +149,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Relationship'
         '400':
-          description: Invalid IDs, self-relationship, or missing person.
+          description: Invalid IDs, self-relationship, missing person, or cycle.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              examples:
+                invalidIds:
+                  value:
+                    error: Parent and child must be valid IDs.
+                samePerson:
+                  value:
+                    error: Parent and child must not be the same person.
+                createsCycle:
+                  value:
+                    error: 'Cannot create relationship: it would introduce a cycle.'
+                missingPerson:
+                  value:
+                    error: Parent or child was not found.
         '409':
           description: Relationship already exists.
           content:
@@ -167,14 +201,8 @@ components:
       required: true
       schema:
         type: integer
-      description: Numeric database ID.
-  responses:
-    InvalidPerson:
-      description: First name or last name is required.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+        minimum: 1
+      description: Positive numeric database ID.
   schemas:
     Person:
       type: object
@@ -210,7 +238,7 @@ components:
           type: string
     PersonInput:
       type: object
-      description: At least one of first_name or last_name must be non-empty after trimming.
+      description: At least one of first_name or last_name must be non-empty after trimming. If both life dates are set, birth_date must be before or equal to death_date.
       properties:
         first_name:
           type: string
@@ -254,7 +282,7 @@ components:
           type: integer
         child_id:
           type: integer
-      description: parent_id and child_id must refer to existing persons and must differ.
+      description: parent_id and child_id must be positive IDs, must refer to existing persons, must differ, and must not create a cycle in the family tree.
     Error:
       type: object
       required:
