@@ -1,0 +1,32 @@
+{
+  "name": "flintr-genealogy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "client": "vite",
+    "server": "tsx watch server/index.ts",
+    "server:start": "tsx server/index.ts",
+    "build": "tsc -b && vite build",
+    "test": "tsx --test \"server/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "better-sqlite3": "^12.2.0",
+    "express": "^5.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.2.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "concurrently": "^9.2.0",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2"
+  }
+}

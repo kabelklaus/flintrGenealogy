@@ -1,0 +1,204 @@
+import express from 'express';
+import type Database from 'better-sqlite3';
+import { openDatabase, type PersonRow, type RelationshipRow } from './database.ts';
+
+type PersonPayload = {
+  first_name?: unknown;
+  last_name?: unknown;
+  birth_date?: unknown;
+  death_date?: unknown;
+  notes?: unknown;
+};
+
+type RelationshipPayload = {
+  parent_id?: unknown;
+  child_id?: unknown;
+};
+
+export function createApp(db: Database.Database = openDatabase()) {
+  const app = express();
+  app.use(express.json());
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  app.get('/api/persons', (_req, res) => {
+    const persons = db.prepare('SELECT * FROM persons ORDER BY last_name, first_name, id').all() as PersonRow[];
+    res.json(persons);
+  });
+
+  app.post('/api/persons', (req, res) => {
+    const payload = normalizePerson(req.body);
+    if (!payload) {
+      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      return;
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO persons (first_name, last_name, birth_date, death_date, notes)
+         VALUES (@first_name, @last_name, @birth_date, @death_date, @notes)`,
+      )
+      .run(payload);
+
+    const person = getPerson(db, Number(result.lastInsertRowid));
+    res.status(201).json(person);
+  });
+
+  app.patch('/api/persons/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+      return;
+    }
+
+    const existing = getPerson(db, id);
+    if (!existing) {
+      res.status(404).json({ error: 'Person nicht gefunden.' });
+      return;
+    }
+
+    const payload = normalizePerson({ ...existing, ...req.body });
+    if (!payload) {
+      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      return;
+    }
+
+    db.prepare(
+      `UPDATE persons
+       SET first_name = @first_name,
+           last_name = @last_name,
+           birth_date = @birth_date,
+           death_date = @death_date,
+           notes = @notes,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = @id`,
+    ).run({ ...payload, id });
+
+    res.json(getPerson(db, id));
+  });
+
+  app.delete('/api/persons/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+      return;
+    }
+
+    const result = db.prepare('DELETE FROM persons WHERE id = ?').run(id);
+    if (result.changes === 0) {
+      res.status(404).json({ error: 'Person nicht gefunden.' });
+      return;
+    }
+
+    res.status(204).send();
+  });
+
+  app.get('/api/relationships', (_req, res) => {
+    const relationships = db.prepare('SELECT * FROM relationships ORDER BY id').all() as RelationshipRow[];
+    res.json(relationships);
+  });
+
+  app.post('/api/relationships', (req, res) => {
+    const payload = normalizeRelationship(req.body);
+    if (!payload) {
+      res.status(400).json({ error: 'Elternteil und Kind muessen gueltige IDs sein.' });
+      return;
+    }
+
+    if (payload.parent_id === payload.child_id) {
+      res.status(400).json({ error: 'Elternteil und Kind duerfen nicht identisch sein.' });
+      return;
+    }
+
+    try {
+      const result = db
+        .prepare('INSERT INTO relationships (parent_id, child_id, type) VALUES (?, ?, ?)')
+        .run(payload.parent_id, payload.child_id, 'parent');
+      const relationship = getRelationship(db, Number(result.lastInsertRowid));
+      res.status(201).json(relationship);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('UNIQUE')) {
+        res.status(409).json({ error: 'Diese Eltern-Kind-Beziehung existiert bereits.' });
+        return;
+      }
+
+      if (message.includes('FOREIGN KEY')) {
+        res.status(400).json({ error: 'Elternteil oder Kind wurde nicht gefunden.' });
+        return;
+      }
+
+      throw error;
+    }
+  });
+
+  app.delete('/api/relationships/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: 'Ungueltige Beziehungs-ID.' });
+      return;
+    }
+
+    const result = db.prepare('DELETE FROM relationships WHERE id = ?').run(id);
+    if (result.changes === 0) {
+      res.status(404).json({ error: 'Beziehung nicht gefunden.' });
+      return;
+    }
+
+    res.status(204).send();
+  });
+
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(error);
+    res.status(500).json({ error: 'Interner Serverfehler.' });
+  });
+
+  return app;
+}
+
+function normalizePerson(payload: PersonPayload) {
+  const first_name = asText(payload.first_name);
+  const last_name = asText(payload.last_name);
+
+  if (!first_name && !last_name) {
+    return null;
+  }
+
+  return {
+    first_name,
+    last_name,
+    birth_date: asOptionalText(payload.birth_date),
+    death_date: asOptionalText(payload.death_date),
+    notes: asText(payload.notes),
+  };
+}
+
+function normalizeRelationship(payload: RelationshipPayload) {
+  const parent_id = Number(payload.parent_id);
+  const child_id = Number(payload.child_id);
+
+  if (!Number.isInteger(parent_id) || !Number.isInteger(child_id)) {
+    return null;
+  }
+
+  return { parent_id, child_id };
+}
+
+function asText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function asOptionalText(value: unknown) {
+  const text = asText(value);
+  return text.length > 0 ? text : null;
+}
+
+function getPerson(db: Database.Database, id: number) {
+  return db.prepare('SELECT * FROM persons WHERE id = ?').get(id) as PersonRow | undefined;
+}
+
+function getRelationship(db: Database.Database, id: number) {
+  return db.prepare('SELECT * FROM relationships WHERE id = ?').get(id) as RelationshipRow | undefined;
+}
