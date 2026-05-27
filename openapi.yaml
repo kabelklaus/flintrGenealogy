@@ -1,0 +1,301 @@
+openapi: 3.0.3
+info:
+  title: flintrGenealogy REST API
+  version: 0.1.0
+  description: REST API for managing persons and parent-child relationships.
+servers:
+  - url: http://localhost:3001
+paths:
+  /api/health:
+    get:
+      summary: Check API health
+      responses:
+        '200':
+          description: API is reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+  /api/persons:
+    get:
+      summary: List persons
+      responses:
+        '200':
+          description: Persons ordered by last name, first name, and ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Person'
+    post:
+      summary: Create a person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonInput'
+      responses:
+        '201':
+          description: Person created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '400':
+          description: Invalid person payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingName:
+                  value:
+                    error: First name or last name is required.
+                invalidLifeDates:
+                  value:
+                    error: Birth date must be before or equal to death date.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
+  /api/persons/{id}:
+    patch:
+      summary: Update a person
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonInput'
+      responses:
+        '200':
+          description: Person updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '400':
+          description: Invalid person ID or payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidId:
+                  value:
+                    error: Invalid person ID.
+                missingName:
+                  value:
+                    error: First name or last name is required.
+                invalidLifeDates:
+                  value:
+                    error: Birth date must be before or equal to death date.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
+        '404':
+          description: Person not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a person
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Person deleted.
+        '400':
+          description: Invalid person ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Person not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/relationships:
+    get:
+      summary: List parent-child relationships
+      responses:
+        '200':
+          description: Relationships ordered by ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Relationship'
+    post:
+      summary: Create a parent-child relationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationshipInput'
+      responses:
+        '201':
+          description: Relationship created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          description: Invalid IDs, self-relationship, missing person, or cycle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidIds:
+                  value:
+                    error: Parent and child must be valid IDs.
+                samePerson:
+                  value:
+                    error: Parent and child must not be the same person.
+                createsCycle:
+                  value:
+                    error: 'Cannot create relationship: it would introduce a cycle.'
+                missingPerson:
+                  value:
+                    error: Parent or child was not found.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
+        '409':
+          description: Relationship already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/relationships/{id}:
+    delete:
+      summary: Delete a relationship
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Relationship deleted.
+        '400':
+          description: Invalid relationship ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Relationship not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      description: Positive numeric database ID.
+  schemas:
+    Person:
+      type: object
+      required:
+        - id
+        - first_name
+        - last_name
+        - birth_date
+        - death_date
+        - notes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        first_name:
+          type: string
+        last_name:
+          type: string
+        birth_date:
+          type: string
+          nullable: true
+          description: Optional text value, usually an ISO date from the UI.
+        death_date:
+          type: string
+          nullable: true
+          description: Optional text value, usually an ISO date from the UI.
+        notes:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    PersonInput:
+      type: object
+      description: At least one of first_name or last_name must be non-empty after trimming. If both life dates are set, birth_date must be before or equal to death_date.
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        birth_date:
+          type: string
+          nullable: true
+        death_date:
+          type: string
+          nullable: true
+        notes:
+          type: string
+    Relationship:
+      type: object
+      required:
+        - id
+        - parent_id
+        - child_id
+        - type
+        - created_at
+      properties:
+        id:
+          type: integer
+        parent_id:
+          type: integer
+        child_id:
+          type: integer
+        type:
+          type: string
+          example: parent
+        created_at:
+          type: string
+    RelationshipInput:
+      type: object
+      required:
+        - parent_id
+        - child_id
+      properties:
+        parent_id:
+          type: integer
+        child_id:
+          type: integer
+      description: parent_id and child_id must be positive IDs, must refer to existing persons, must differ, and must not create a cycle in the family tree.
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string

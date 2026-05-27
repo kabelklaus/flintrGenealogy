@@ -4,5 +4,5 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createApp();
 
 app.listen(port, () => {
-  console.log(`REST-API laeuft auf http://localhost:${port}`);
+  console.log(`REST API is running at http://localhost:${port}`);
 });

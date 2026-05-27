@@ -15,6 +15,16 @@ type RelationshipPayload = {
   child_id?: unknown;
 };
 
+type ChildIdRow = {
+  child_id: number;
+};
+
+type HttpError = Error & {
+  expose?: boolean;
+  status?: number;
+  statusCode?: number;
+};
+
 export function createApp(db: Database.Database = openDatabase()) {
   const app = express();
   app.use(express.json());
@@ -31,7 +41,12 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.post('/api/persons', (req, res) => {
     const payload = normalizePerson(req.body);
     if (!payload) {
-      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      res.status(400).json({ error: 'First name or last name is required.' });
+      return;
+    }
+
+    if (hasInvalidLifeDates(payload)) {
+      res.status(400).json({ error: 'Birth date must be before or equal to death date.' });
       return;
     }
 
@@ -47,21 +62,26 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.patch('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
 
     const existing = getPerson(db, id);
     if (!existing) {
-      res.status(404).json({ error: 'Person nicht gefunden.' });
+      res.status(404).json({ error: 'Person not found.' });
       return;
     }
 
     const payload = normalizePerson({ ...existing, ...req.body });
     if (!payload) {
-      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      res.status(400).json({ error: 'First name or last name is required.' });
+      return;
+    }
+
+    if (hasInvalidLifeDates(payload)) {
+      res.status(400).json({ error: 'Birth date must be before or equal to death date.' });
       return;
     }
 
@@ -80,15 +100,15 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.delete('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
 
     const result = db.prepare('DELETE FROM persons WHERE id = ?').run(id);
     if (result.changes === 0) {
-      res.status(404).json({ error: 'Person nicht gefunden.' });
+      res.status(404).json({ error: 'Person not found.' });
       return;
     }
 
@@ -103,12 +123,17 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.post('/api/relationships', (req, res) => {
     const payload = normalizeRelationship(req.body);
     if (!payload) {
-      res.status(400).json({ error: 'Elternteil und Kind muessen gueltige IDs sein.' });
+      res.status(400).json({ error: 'Parent and child must be valid IDs.' });
       return;
     }
 
     if (payload.parent_id === payload.child_id) {
-      res.status(400).json({ error: 'Elternteil und Kind duerfen nicht identisch sein.' });
+      res.status(400).json({ error: 'Parent and child must not be the same person.' });
+      return;
+    }
+
+    if (hasRelationshipPath(db, payload.child_id, payload.parent_id)) {
+      res.status(400).json({ error: 'Cannot create relationship: it would introduce a cycle.' });
       return;
     }
 
@@ -121,12 +146,12 @@ export function createApp(db: Database.Database = openDatabase()) {
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('UNIQUE')) {
-        res.status(409).json({ error: 'Diese Eltern-Kind-Beziehung existiert bereits.' });
+        res.status(409).json({ error: 'This parent-child relationship already exists.' });
         return;
       }
 
       if (message.includes('FOREIGN KEY')) {
-        res.status(400).json({ error: 'Elternteil oder Kind wurde nicht gefunden.' });
+        res.status(400).json({ error: 'Parent or child was not found.' });
         return;
       }
 
@@ -135,15 +160,15 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.delete('/api/relationships/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Beziehungs-ID.' });
+    const id = asPositiveInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: 'Invalid relationship ID.' });
       return;
     }
 
     const result = db.prepare('DELETE FROM relationships WHERE id = ?').run(id);
     if (result.changes === 0) {
-      res.status(404).json({ error: 'Beziehung nicht gefunden.' });
+      res.status(404).json({ error: 'Relationship not found.' });
       return;
     }
 
@@ -151,16 +176,26 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (isExposedHttpError(error) && error.statusCode === 400) {
+      res.status(400).json({ error: 'Invalid JSON payload.' });
+      return;
+    }
+
     console.error(error);
-    res.status(500).json({ error: 'Interner Serverfehler.' });
+    res.status(500).json({ error: 'Internal server error.' });
   });
 
   return app;
 }
 
-function normalizePerson(payload: PersonPayload) {
-  const first_name = asText(payload.first_name);
-  const last_name = asText(payload.last_name);
+function normalizePerson(payload: PersonPayload | unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const personPayload = payload as PersonPayload;
+  const first_name = asText(personPayload.first_name);
+  const last_name = asText(personPayload.last_name);
 
   if (!first_name && !last_name) {
     return null;
@@ -169,17 +204,22 @@ function normalizePerson(payload: PersonPayload) {
   return {
     first_name,
     last_name,
-    birth_date: asOptionalText(payload.birth_date),
-    death_date: asOptionalText(payload.death_date),
-    notes: asText(payload.notes),
+    birth_date: asOptionalText(personPayload.birth_date),
+    death_date: asOptionalText(personPayload.death_date),
+    notes: asText(personPayload.notes),
   };
 }
 
-function normalizeRelationship(payload: RelationshipPayload) {
-  const parent_id = Number(payload.parent_id);
-  const child_id = Number(payload.child_id);
+function normalizeRelationship(payload: RelationshipPayload | unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
 
-  if (!Number.isInteger(parent_id) || !Number.isInteger(child_id)) {
+  const relationshipPayload = payload as RelationshipPayload;
+  const parent_id = asPositiveInteger(relationshipPayload.parent_id);
+  const child_id = asPositiveInteger(relationshipPayload.child_id);
+
+  if (!parent_id || !child_id) {
     return null;
   }
 
@@ -193,6 +233,42 @@ function asText(value: unknown) {
 function asOptionalText(value: unknown) {
   const text = asText(value);
   return text.length > 0 ? text : null;
+}
+
+function asPositiveInteger(value: unknown) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function hasInvalidLifeDates(person: { birth_date: string | null; death_date: string | null }) {
+  return Boolean(person.birth_date && person.death_date && person.birth_date > person.death_date);
+}
+
+function hasRelationshipPath(db: Database.Database, startId: number, targetId: number) {
+  const queuedIds = [startId];
+  const visitedIds = new Set<number>([startId]);
+  const selectChildren = db.prepare('SELECT child_id FROM relationships WHERE parent_id = ?');
+
+  for (let index = 0; index < queuedIds.length; index += 1) {
+    const currentId = queuedIds[index];
+    if (currentId === targetId) {
+      return true;
+    }
+
+    const children = selectChildren.all(currentId) as ChildIdRow[];
+    for (const child of children) {
+      if (!visitedIds.has(child.child_id)) {
+        visitedIds.add(child.child_id);
+        queuedIds.push(child.child_id);
+      }
+    }
+  }
+
+  return false;
+}
+
+function isExposedHttpError(error: unknown): error is HttpError {
+  return error instanceof Error && Boolean((error as HttpError).expose);
 }
 
 function getPerson(db: Database.Database, id: number) {
