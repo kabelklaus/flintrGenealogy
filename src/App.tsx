@@ -54,6 +54,7 @@ const backendErrorKeys: Record<string, AppStringKey> = {
   'Parent or child was not found.': 'errorParentOrChildNotFound',
   'Invalid relationship ID.': 'errorInvalidRelationshipId',
   'Relationship not found.': 'errorRelationshipNotFound',
+  'Invalid JSON payload.': 'errorInvalidJsonPayload',
   'Internal server error.': 'errorInternalServer',
 };
 

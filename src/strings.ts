@@ -45,6 +45,7 @@ export type AppStrings = {
   errorParentOrChildNotFound: string;
   errorInvalidRelationshipId: string;
   errorRelationshipNotFound: string;
+  errorInvalidJsonPayload: string;
   errorInternalServer: string;
 };
 
@@ -96,6 +97,7 @@ export const strings: Record<Language, AppStrings> = {
     errorParentOrChildNotFound: 'Parent or child was not found.',
     errorInvalidRelationshipId: 'Invalid relationship ID.',
     errorRelationshipNotFound: 'Relationship not found.',
+    errorInvalidJsonPayload: 'Invalid JSON payload.',
     errorInternalServer: 'Internal server error.',
   },
   de: {
@@ -143,6 +145,7 @@ export const strings: Record<Language, AppStrings> = {
     errorParentOrChildNotFound: 'Elternteil oder Kind wurde nicht gefunden.',
     errorInvalidRelationshipId: 'Ungueltige Beziehungs-ID.',
     errorRelationshipNotFound: 'Beziehung nicht gefunden.',
+    errorInvalidJsonPayload: 'Ungueltiger JSON-Inhalt.',
     errorInternalServer: 'Interner Serverfehler.',
   },
 };

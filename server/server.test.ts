@@ -76,6 +76,8 @@ test('verhindert ungueltige und doppelte Beziehungen', async () => {
 });
 
 test('validiert Lebensdaten und positive IDs', async () => {
+  assert.equal((await post('/api/persons', null)).status, 400);
+
   const invalidDates = await post('/api/persons', {
     first_name: 'Erika',
     birth_date: '2020-01-02',
@@ -90,6 +92,8 @@ test('validiert Lebensdaten und positive IDs', async () => {
   });
   assert.equal(person.status, 201);
 
+  assert.equal((await patch(`/api/persons/${person.body.id}`, null)).status, 400);
+
   const invalidUpdate = await patch(`/api/persons/${person.body.id}`, { death_date: '1999-12-31' });
   assert.equal(invalidUpdate.status, 400);
 
@@ -100,6 +104,8 @@ test('validiert Lebensdaten und positive IDs', async () => {
 });
 
 test('verhindert Kreisbeziehungen im Stammbaum', async () => {
+  assert.equal((await post('/api/relationships', null)).status, 400);
+
   const grandparent = await post<PersonRow>('/api/persons', { first_name: 'Gina' });
   const parent = await post<PersonRow>('/api/persons', { first_name: 'Hannes' });
   const child = await post<PersonRow>('/api/persons', { first_name: 'Ida' });

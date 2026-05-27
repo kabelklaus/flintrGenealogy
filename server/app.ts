@@ -19,6 +19,12 @@ type ChildIdRow = {
   child_id: number;
 };
 
+type HttpError = Error & {
+  expose?: boolean;
+  status?: number;
+  statusCode?: number;
+};
+
 export function createApp(db: Database.Database = openDatabase()) {
   const app = express();
   app.use(express.json());
@@ -170,6 +176,11 @@ export function createApp(db: Database.Database = openDatabase()) {
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (isExposedHttpError(error) && error.statusCode === 400) {
+      res.status(400).json({ error: 'Invalid JSON payload.' });
+      return;
+    }
+
     console.error(error);
     res.status(500).json({ error: 'Internal server error.' });
   });
@@ -177,9 +188,14 @@ export function createApp(db: Database.Database = openDatabase()) {
   return app;
 }
 
-function normalizePerson(payload: PersonPayload) {
-  const first_name = asText(payload.first_name);
-  const last_name = asText(payload.last_name);
+function normalizePerson(payload: PersonPayload | unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const personPayload = payload as PersonPayload;
+  const first_name = asText(personPayload.first_name);
+  const last_name = asText(personPayload.last_name);
 
   if (!first_name && !last_name) {
     return null;
@@ -188,15 +204,20 @@ function normalizePerson(payload: PersonPayload) {
   return {
     first_name,
     last_name,
-    birth_date: asOptionalText(payload.birth_date),
-    death_date: asOptionalText(payload.death_date),
-    notes: asText(payload.notes),
+    birth_date: asOptionalText(personPayload.birth_date),
+    death_date: asOptionalText(personPayload.death_date),
+    notes: asText(personPayload.notes),
   };
 }
 
-function normalizeRelationship(payload: RelationshipPayload) {
-  const parent_id = asPositiveInteger(payload.parent_id);
-  const child_id = asPositiveInteger(payload.child_id);
+function normalizeRelationship(payload: RelationshipPayload | unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const relationshipPayload = payload as RelationshipPayload;
+  const parent_id = asPositiveInteger(relationshipPayload.parent_id);
+  const child_id = asPositiveInteger(relationshipPayload.child_id);
 
   if (!parent_id || !child_id) {
     return null;
@@ -225,7 +246,7 @@ function hasInvalidLifeDates(person: { birth_date: string | null; death_date: st
 
 function hasRelationshipPath(db: Database.Database, startId: number, targetId: number) {
   const queuedIds = [startId];
-  const visitedIds = new Set<number>();
+  const visitedIds = new Set<number>([startId]);
   const selectChildren = db.prepare('SELECT child_id FROM relationships WHERE parent_id = ?');
 
   for (let index = 0; index < queuedIds.length; index += 1) {
@@ -234,20 +255,20 @@ function hasRelationshipPath(db: Database.Database, startId: number, targetId: n
       return true;
     }
 
-    if (visitedIds.has(currentId)) {
-      continue;
-    }
-
-    visitedIds.add(currentId);
     const children = selectChildren.all(currentId) as ChildIdRow[];
     for (const child of children) {
       if (!visitedIds.has(child.child_id)) {
+        visitedIds.add(child.child_id);
         queuedIds.push(child.child_id);
       }
     }
   }
 
   return false;
+}
+
+function isExposedHttpError(error: unknown): error is HttpError {
+  return error instanceof Error && Boolean((error as HttpError).expose);
 }
 
 function getPerson(db: Database.Database, id: number) {

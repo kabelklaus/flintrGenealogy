@@ -62,6 +62,9 @@ paths:
                 invalidLifeDates:
                   value:
                     error: Birth date must be before or equal to death date.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
   /api/persons/{id}:
     patch:
       summary: Update a person
@@ -96,6 +99,9 @@ paths:
                 invalidLifeDates:
                   value:
                     error: Birth date must be before or equal to death date.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
         '404':
           description: Person not found.
           content:
@@ -167,6 +173,9 @@ paths:
                 missingPerson:
                   value:
                     error: Parent or child was not found.
+                invalidJson:
+                  value:
+                    error: Invalid JSON payload.
         '409':
           description: Relationship already exists.
           content:
