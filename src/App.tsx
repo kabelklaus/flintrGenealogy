@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { defaultLanguage, isLanguage, strings, type AppStrings, type Language } from './strings.ts';
 
 type Person = {
   id: number;
@@ -35,7 +36,14 @@ const emptyPersonForm: PersonFormState = {
   notes: '',
 };
 
+const languageStorageKey = 'flintrGenealogy.language';
+const languageOptions: Language[] = ['en', 'de'];
+
 export default function App() {
+  const [language, setLanguage] = useState<Language>(() => {
+    const storedLanguage = window.localStorage.getItem(languageStorageKey);
+    return isLanguage(storedLanguage) ? storedLanguage : defaultLanguage;
+  });
   const [persons, setPersons] = useState<Person[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [personForm, setPersonForm] = useState<PersonFormState>(emptyPersonForm);
@@ -44,6 +52,7 @@ export default function App() {
   const [childId, setChildId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const appStrings = strings[language];
 
   async function loadData() {
     setIsLoading(true);
@@ -57,7 +66,7 @@ export default function App() {
       setPersons(loadedPersons);
       setRelationships(loadedRelationships);
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getErrorMessage(requestError, appStrings));
     } finally {
       setIsLoading(false);
     }
@@ -66,6 +75,12 @@ export default function App() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.title = appStrings.appTitle;
+    window.localStorage.setItem(languageStorageKey, language);
+  }, [appStrings.appTitle, language]);
 
   const selectedPerson = editingPersonId ? persons.find((person) => person.id === editingPersonId) : null;
   const treeRoots = useMemo(() => getTreeRoots(persons, relationships), [persons, relationships]);
@@ -82,7 +97,7 @@ export default function App() {
       resetPersonForm();
       await loadData();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getErrorMessage(requestError, appStrings));
     }
   }
 
@@ -102,7 +117,7 @@ export default function App() {
       setChildId('');
       await loadData();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getErrorMessage(requestError, appStrings));
     }
   }
 
@@ -116,7 +131,7 @@ export default function App() {
       }
       await loadData();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getErrorMessage(requestError, appStrings));
     }
   }
 
@@ -127,7 +142,7 @@ export default function App() {
       await request(`/api/relationships/${id}`, { method: 'DELETE' });
       await loadData();
     } catch (requestError) {
-      setError(getErrorMessage(requestError));
+      setError(getErrorMessage(requestError, appStrings));
     }
   }
 
@@ -147,26 +162,45 @@ export default function App() {
     setPersonForm(emptyPersonForm);
   }
 
+  function handleLanguageChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextLanguage = event.target.value;
+    if (isLanguage(nextLanguage)) {
+      setLanguage(nextLanguage);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="page-header">
         <div>
-          <h1>Stammbaum</h1>
-          <p>Personen und Eltern-Kind-Beziehungen lokal verwalten.</p>
+          <h1>{appStrings.appTitle}</h1>
+          <p>{appStrings.pageIntro}</p>
         </div>
-        <button type="button" className="secondary-button" onClick={() => void loadData()}>
-          Aktualisieren
-        </button>
+        <div className="header-actions">
+          <label className="language-switcher">
+            <span>{appStrings.languageLabel}</span>
+            <select value={language} onChange={handleLanguageChange} aria-label={appStrings.languageLabel}>
+              {languageOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === 'en' ? appStrings.englishLanguage : appStrings.germanLanguage}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="secondary-button" onClick={() => void loadData()}>
+            {appStrings.refresh}
+          </button>
+        </div>
       </header>
 
       {error ? <p className="error-message">{error}</p> : null}
 
       <section className="workspace" aria-busy={isLoading}>
         <div className="panel">
-          <h2>{selectedPerson ? 'Person bearbeiten' : 'Person anlegen'}</h2>
+          <h2>{selectedPerson ? appStrings.editPersonTitle : appStrings.createPersonTitle}</h2>
           <form className="stack" onSubmit={handlePersonSubmit}>
             <label>
-              Vorname
+              {appStrings.firstName}
               <input
                 value={personForm.first_name}
                 onChange={(event) => setPersonForm({ ...personForm, first_name: event.target.value })}
@@ -174,7 +208,7 @@ export default function App() {
               />
             </label>
             <label>
-              Nachname
+              {appStrings.lastName}
               <input
                 value={personForm.last_name}
                 onChange={(event) => setPersonForm({ ...personForm, last_name: event.target.value })}
@@ -183,7 +217,7 @@ export default function App() {
             </label>
             <div className="form-grid">
               <label>
-                Geburt
+                {appStrings.birthDate}
                 <input
                   type="date"
                   value={personForm.birth_date}
@@ -191,7 +225,7 @@ export default function App() {
                 />
               </label>
               <label>
-                Tod
+                {appStrings.deathDate}
                 <input
                   type="date"
                   value={personForm.death_date}
@@ -200,7 +234,7 @@ export default function App() {
               </label>
             </div>
             <label>
-              Notizen
+              {appStrings.notes}
               <textarea
                 rows={4}
                 value={personForm.notes}
@@ -208,10 +242,10 @@ export default function App() {
               />
             </label>
             <div className="button-row">
-              <button type="submit">{selectedPerson ? 'Speichern' : 'Anlegen'}</button>
+              <button type="submit">{selectedPerson ? appStrings.save : appStrings.create}</button>
               {selectedPerson ? (
                 <button type="button" className="secondary-button" onClick={resetPersonForm}>
-                  Abbrechen
+                  {appStrings.cancel}
                 </button>
               ) : null}
             </div>
@@ -219,12 +253,12 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <h2>Beziehung anlegen</h2>
+          <h2>{appStrings.createRelationshipTitle}</h2>
           <form className="stack" onSubmit={handleRelationshipSubmit}>
             <label>
-              Elternteil
+              {appStrings.parent}
               <select value={parentId} onChange={(event) => setParentId(event.target.value)} required>
-                <option value="">Auswaehlen</option>
+                <option value="">{appStrings.selectPlaceholder}</option>
                 {persons.map((person) => (
                   <option key={person.id} value={person.id}>
                     {formatPerson(person)}
@@ -233,9 +267,9 @@ export default function App() {
               </select>
             </label>
             <label>
-              Kind
+              {appStrings.child}
               <select value={childId} onChange={(event) => setChildId(event.target.value)} required>
-                <option value="">Auswaehlen</option>
+                <option value="">{appStrings.selectPlaceholder}</option>
                 {persons.map((person) => (
                   <option key={person.id} value={person.id}>
                     {formatPerson(person)}
@@ -243,21 +277,21 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <button type="submit">Verknuepfen</button>
+            <button type="submit">{appStrings.link}</button>
           </form>
 
           <div className="relationship-list">
             {relationships.length === 0 ? (
-              <p className="empty-state">Noch keine Beziehungen.</p>
+              <p className="empty-state">{appStrings.noRelationships}</p>
             ) : (
               relationships.map((relationship) => (
                 <div className="relationship-row" key={relationship.id}>
                   <span>
-                    {formatPersonById(persons, relationship.parent_id)} {'->'}{' '}
-                    {formatPersonById(persons, relationship.child_id)}
+                    {formatPersonById(persons, relationship.parent_id, appStrings)} {'->'}{' '}
+                    {formatPersonById(persons, relationship.child_id, appStrings)}
                   </span>
                   <button type="button" className="link-button" onClick={() => void deleteRelationship(relationship.id)}>
-                    Loeschen
+                    {appStrings.delete}
                   </button>
                 </div>
               ))
@@ -266,23 +300,23 @@ export default function App() {
         </div>
 
         <div className="panel wide-panel">
-          <h2>Personen</h2>
+          <h2>{appStrings.personsTitle}</h2>
           {persons.length === 0 ? (
-            <p className="empty-state">Noch keine Personen angelegt.</p>
+            <p className="empty-state">{appStrings.noPersons}</p>
           ) : (
             <div className="person-list">
               {persons.map((person) => (
                 <article className="person-row" key={person.id}>
                   <div>
                     <strong>{formatPerson(person)}</strong>
-                    <p>{formatLifeDates(person)}</p>
+                    <p>{formatLifeDates(person, appStrings)}</p>
                   </div>
                   <div className="row-actions">
                     <button type="button" className="secondary-button" onClick={() => editPerson(person)}>
-                      Bearbeiten
+                      {appStrings.edit}
                     </button>
                     <button type="button" className="danger-button" onClick={() => void deletePerson(person.id)}>
-                      Loeschen
+                      {appStrings.delete}
                     </button>
                   </div>
                 </article>
@@ -292,11 +326,11 @@ export default function App() {
         </div>
 
         <div className="panel wide-panel">
-          <h2>Stammbaum</h2>
+          <h2>{appStrings.treeTitle}</h2>
           {persons.length === 0 ? (
-            <p className="empty-state">Lege Personen an, um den Stammbaum aufzubauen.</p>
+            <p className="empty-state">{appStrings.emptyTree}</p>
           ) : treeRoots.length === 0 ? (
-            <p className="empty-state">Keine Wurzelperson gefunden. Pruefe, ob Beziehungen einen Kreis bilden.</p>
+            <p className="empty-state">{appStrings.noRootPerson}</p>
           ) : (
             <div className="tree-list">
               {treeRoots.map((person) => (
@@ -305,6 +339,7 @@ export default function App() {
                   person={person}
                   persons={persons}
                   childrenByParent={childrenByParent}
+                  appStrings={appStrings}
                   visited={new Set()}
                 />
               ))}
@@ -320,11 +355,13 @@ function TreeNode({
   person,
   persons,
   childrenByParent,
+  appStrings,
   visited,
 }: {
   person: Person;
   persons: Person[];
   childrenByParent: Map<number, number[]>;
+  appStrings: AppStrings;
   visited: Set<number>;
 }) {
   const nextVisited = new Set(visited);
@@ -342,7 +379,9 @@ function TreeNode({
           {children.map((child) =>
             nextVisited.has(child.id) ? (
               <div className="tree-node" key={child.id}>
-                <div className="tree-person warning">{formatPerson(child)} (Kreis erkannt)</div>
+                <div className="tree-person warning">
+                  {formatPerson(child)} ({appStrings.cycleDetected})
+                </div>
               </div>
             ) : (
               <TreeNode
@@ -350,6 +389,7 @@ function TreeNode({
                 person={child}
                 persons={persons}
                 childrenByParent={childrenByParent}
+                appStrings={appStrings}
                 visited={nextVisited}
               />
             ),
@@ -400,14 +440,14 @@ function formatPerson(person: Person) {
   return [person.first_name, person.last_name].filter(Boolean).join(' ');
 }
 
-function formatPersonById(persons: Person[], id: number) {
-  return formatPerson(persons.find((person) => person.id === id) ?? fallbackPerson(id));
+function formatPersonById(persons: Person[], id: number, appStrings: AppStrings) {
+  return formatPerson(persons.find((person) => person.id === id) ?? fallbackPerson(id, appStrings));
 }
 
-function fallbackPerson(id: number): Person {
+function fallbackPerson(id: number, appStrings: AppStrings): Person {
   return {
     id,
-    first_name: `Person ${id}`,
+    first_name: appStrings.fallbackPersonName(id),
     last_name: '',
     birth_date: null,
     death_date: null,
@@ -417,14 +457,14 @@ function fallbackPerson(id: number): Person {
   };
 }
 
-function formatLifeDates(person: Person) {
+function formatLifeDates(person: Person, appStrings: AppStrings) {
   if (!person.birth_date && !person.death_date) {
-    return 'Keine Lebensdaten';
+    return appStrings.noLifeDates;
   }
 
   return `${person.birth_date ?? '?'} - ${person.death_date ?? '?'}`;
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Unbekannter Fehler.';
+function getErrorMessage(error: unknown, appStrings: AppStrings) {
+  return error instanceof Error ? error.message : appStrings.unknownError;
 }

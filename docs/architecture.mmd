@@ -1,0 +1,12 @@
+flowchart TD
+  Browser[Browser] --> React[React UI]
+  React -->|fetch /api/persons| Vite[Vite dev proxy]
+  React -->|fetch /api/relationships| Vite
+  React -->|language setting| LocalStorage[Browser localStorage]
+  Vite -->|proxy /api| Api[Express REST API]
+  Api -->|reads and writes| Db[(SQLite genealogy.sqlite)]
+
+  subgraph Server
+    Api
+    Db
+  end

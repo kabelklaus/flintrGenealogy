@@ -31,7 +31,7 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.post('/api/persons', (req, res) => {
     const payload = normalizePerson(req.body);
     if (!payload) {
-      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      res.status(400).json({ error: 'First name or last name is required.' });
       return;
     }
 
@@ -49,19 +49,19 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.patch('/api/persons/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+      res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
 
     const existing = getPerson(db, id);
     if (!existing) {
-      res.status(404).json({ error: 'Person nicht gefunden.' });
+      res.status(404).json({ error: 'Person not found.' });
       return;
     }
 
     const payload = normalizePerson({ ...existing, ...req.body });
     if (!payload) {
-      res.status(400).json({ error: 'Vorname oder Nachname muss gesetzt sein.' });
+      res.status(400).json({ error: 'First name or last name is required.' });
       return;
     }
 
@@ -82,13 +82,13 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.delete('/api/persons/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Personen-ID.' });
+      res.status(400).json({ error: 'Invalid person ID.' });
       return;
     }
 
     const result = db.prepare('DELETE FROM persons WHERE id = ?').run(id);
     if (result.changes === 0) {
-      res.status(404).json({ error: 'Person nicht gefunden.' });
+      res.status(404).json({ error: 'Person not found.' });
       return;
     }
 
@@ -103,12 +103,12 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.post('/api/relationships', (req, res) => {
     const payload = normalizeRelationship(req.body);
     if (!payload) {
-      res.status(400).json({ error: 'Elternteil und Kind muessen gueltige IDs sein.' });
+      res.status(400).json({ error: 'Parent and child must be valid IDs.' });
       return;
     }
 
     if (payload.parent_id === payload.child_id) {
-      res.status(400).json({ error: 'Elternteil und Kind duerfen nicht identisch sein.' });
+      res.status(400).json({ error: 'Parent and child must not be the same person.' });
       return;
     }
 
@@ -121,12 +121,12 @@ export function createApp(db: Database.Database = openDatabase()) {
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (message.includes('UNIQUE')) {
-        res.status(409).json({ error: 'Diese Eltern-Kind-Beziehung existiert bereits.' });
+        res.status(409).json({ error: 'This parent-child relationship already exists.' });
         return;
       }
 
       if (message.includes('FOREIGN KEY')) {
-        res.status(400).json({ error: 'Elternteil oder Kind wurde nicht gefunden.' });
+        res.status(400).json({ error: 'Parent or child was not found.' });
         return;
       }
 
@@ -137,13 +137,13 @@ export function createApp(db: Database.Database = openDatabase()) {
   app.delete('/api/relationships/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
-      res.status(400).json({ error: 'Ungueltige Beziehungs-ID.' });
+      res.status(400).json({ error: 'Invalid relationship ID.' });
       return;
     }
 
     const result = db.prepare('DELETE FROM relationships WHERE id = ?').run(id);
     if (result.changes === 0) {
-      res.status(404).json({ error: 'Beziehung nicht gefunden.' });
+      res.status(404).json({ error: 'Relationship not found.' });
       return;
     }
 
@@ -152,7 +152,7 @@ export function createApp(db: Database.Database = openDatabase()) {
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error);
-    res.status(500).json({ error: 'Interner Serverfehler.' });
+    res.status(500).json({ error: 'Internal server error.' });
   });
 
   return app;
